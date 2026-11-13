@@ -4,17 +4,23 @@
 import type Highcharts from "highcharts";
 
 import { getChartSeries, isPointVisible, SafeChart } from "../../internal/utils/highcharts";
-import { DebouncedCall } from "../../internal/utils/utils";
+import { DebouncedCall, isEqualArrays } from "../../internal/utils/utils";
+import { isInsidePlot } from "../utils";
 import { ChartExtraContext } from "./chart-extra-context";
 
 const HOVER_LOST_DELAY = 25;
+
+export type PointerHoverTarget = Highcharts.Point | Highcharts.Point[];
 
 export interface ChartExtraPointerHandlers {
   onPointHover(point: Highcharts.Point): void;
   onGroupHover(group: Highcharts.Point[]): void;
   onHoverLost(): void;
+  onHoverPreview(target: PointerHoverTarget): void;
+  onHoverPreviewCancel(): void;
   onPointClick(point: Highcharts.Point): void;
   onGroupClick(group: Highcharts.Point[]): void;
+  isLocked(): boolean;
 }
 
 // Chart helper that implements pointer events (click and hover).
@@ -25,6 +31,7 @@ export class ChartExtraPointer {
   private hoveredGroup: null | Highcharts.Point[] = null;
   private tooltipHovered = false;
   private hoverLostCall = new DebouncedCall();
+  private hover = new DebouncedCall<PointerHoverTarget>(isSameHoverTarget);
 
   constructor(context: ChartExtraContext, handlers: ChartExtraPointerHandlers) {
     this.context = context;
@@ -36,7 +43,10 @@ export class ChartExtraPointer {
     chart.container.addEventListener("mouseout", this.onChartMouseout);
   };
 
+  public cancelPendingHover = () => this.hover.cancelPrevious();
+
   public onChartDestroy = () => {
+    this.hover.cancelPrevious();
     this.context.chartOrNull?.container?.removeEventListener("mousemove", this.onChartMousemove);
     this.context.chartOrNull?.container?.removeEventListener("mouseout", this.onChartMouseout);
   };
@@ -45,6 +55,9 @@ export class ChartExtraPointer {
   // Highcharts because it includes computation of complex shape intersections, such as pie chart segments.
   // When triggered, we set the given point as hovered, and it takes precedence over hovered groups.
   public onSeriesPointMouseOver = (point: Highcharts.Point) => {
+    if (this.handlers.isLocked()) {
+      return;
+    }
     this.setHoveredPoint(point);
   };
 
@@ -62,6 +75,9 @@ export class ChartExtraPointer {
     this.tooltipHovered = true;
     this.hoveredPoint = null;
     this.hoveredGroup = null;
+    if (this.hover.cancelPrevious()) {
+      this.handlers.onHoverPreviewCancel();
+    }
   };
 
   // When the pointer leaves the tooltip it can hover another point or group. If that does not happen,
@@ -75,6 +91,9 @@ export class ChartExtraPointer {
   // of points (those having matching X value in cartesian charts), as this is not directly supported by Highcharts.
   // Points hovering takes precedence over groups hovering.
   private onChartMousemove = (event: MouseEvent) => {
+    if (this.handlers.isLocked()) {
+      return;
+    }
     const chart = this.context.chart();
     // In pie charts there is no support for groups - only a single point can be hovered at a time.
     if (getChartSeries(chart).some((s) => s.type === "pie")) {
@@ -84,9 +103,8 @@ export class ChartExtraPointer {
     const normalized = chart.pointer.normalize(event);
     const plotX = normalized.chartX;
     const plotY = normalized.chartY;
-    const { plotLeft, plotTop, plotWidth, plotHeight } = chart;
     // We only check for matched groups if the plotX, plotY are within the plot area, where series are rendered.
-    if (plotX >= plotLeft && plotX <= plotLeft + plotWidth && plotY >= plotTop && plotY <= plotTop + plotHeight) {
+    if (isInsidePlot(chart, plotX, plotY)) {
       // We match groups by comparing the plotX, plotY against each group rect. If the pointer is within one of
       // the rects - the group is considered matched. Otherwise, we take the group which is closest to the pointer.
       // This is done to avoid gaps, when the hover state switches between on and off in a sparsely populated chart,
@@ -125,13 +143,13 @@ export class ChartExtraPointer {
 
   // This event is triggered by Highcharts when there is a click inside the chart plot. It might or might not include
   // the point, hovered immediately before the click.
-  public onChartClick = (point: null | Highcharts.Point) => {
-    this.onClick(point);
+  public onChartClick = (point: null | Highcharts.Point): boolean => {
+    return this.onClick(point);
   };
 
   // This event is triggered by Highcharts when a series point is clicked, it always has a point target.
-  public onSeriesPointClick = (point: Highcharts.Point) => {
-    this.onClick(point);
+  public onSeriesPointClick = (point: Highcharts.Point): boolean => {
+    return this.onClick(point);
   };
 
   // We treat the chart and point clicks the same, but call different handlers depending on the target (null or point).
@@ -139,24 +157,28 @@ export class ChartExtraPointer {
   // the click event triggered.
   // Before calling the on-point-click or on-group-click handlers, we verify if the target point or group are still valid
   // (visible, and not destroyed by Highcharts).
-  private onClick = (point: null | Highcharts.Point) => {
+  private onClick = (point: null | Highcharts.Point): boolean => {
+    if (this.handlers.isLocked()) {
+      return false;
+    }
+    this.hover.flush();
     const targetPoint = point ?? (this.hoveredPoint && isPointVisible(this.hoveredPoint) ? this.hoveredPoint : null);
     if (targetPoint) {
       this.handlers.onPointClick(targetPoint);
-      return;
+      return true;
     }
     const targetGroup = this.hoveredGroup?.filter(isPointVisible) ?? null;
     if (targetGroup && targetGroup.length > 0) {
       this.handlers.onGroupClick(targetGroup);
-      return;
     }
+    return true;
   };
 
   private setHoveredPoint = (point: Highcharts.Point) => {
     if (isPointVisible(point)) {
       this.hoveredPoint = point;
       this.hoveredGroup = null;
-      this.handlers.onPointHover(point);
+      this.scheduleHover(point);
       this.applyCursorStyle();
     }
   };
@@ -166,7 +188,7 @@ export class ChartExtraPointer {
       const availablePoints = group.filter(isPointVisible);
       this.hoveredPoint = null;
       this.hoveredGroup = availablePoints;
-      this.handlers.onGroupHover(availablePoints);
+      this.scheduleHover(availablePoints);
       this.applyCursorStyle();
     }
   };
@@ -183,6 +205,31 @@ export class ChartExtraPointer {
     }, HOVER_LOST_DELAY);
   };
 
+  private scheduleHover = (target: PointerHoverTarget) => {
+    const delay = this.context.settings.hoverDelay;
+    if (this.hover.call(() => this.applyHover(target), delay > 0 ? delay : -1, target)) {
+      this.handlers.onHoverPreview(target);
+    }
+  };
+
+  private applyHover = (target: PointerHoverTarget) => {
+    const current = this.hoveredPoint ?? this.hoveredGroup;
+    if (!current || !isSameHoverTarget(current, target)) {
+      this.handlers.onHoverPreviewCancel();
+    } else if (Array.isArray(target)) {
+      const group = target.filter(isPointVisible);
+      if (group.length > 0 || target.length === 0) {
+        this.handlers.onGroupHover(group);
+      } else {
+        this.handlers.onHoverPreviewCancel();
+      }
+    } else if (isPointVisible(target)) {
+      this.handlers.onPointHover(target);
+    } else {
+      this.handlers.onHoverPreviewCancel();
+    }
+  };
+
   private applyCursorStyle = () => {
     const container = this.context.chart().container;
     if (container) {
@@ -190,4 +237,11 @@ export class ChartExtraPointer {
       container.style.cursor = value;
     }
   };
+}
+
+function isSameHoverTarget(a: PointerHoverTarget, b: PointerHoverTarget) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return isEqualArrays(a, b, (x, y) => x === y);
+  }
+  return a === b;
 }

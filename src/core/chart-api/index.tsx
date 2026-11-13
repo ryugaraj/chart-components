@@ -7,7 +7,7 @@ import type Highcharts from "highcharts";
 import { fireNonCancelableEvent } from "../../internal/events";
 import { ReadonlyAsyncStore } from "../../internal/utils/async-store";
 import { getChartSeries, getSeriesData } from "../../internal/utils/highcharts";
-import { Writeable } from "../../internal/utils/utils";
+import { DebouncedCall, Writeable } from "../../internal/utils/utils";
 import { CoreChartProps } from "../interfaces";
 import {
   getChartAccessibleDescription,
@@ -21,9 +21,9 @@ import { ChartExtraHighlight } from "./chart-extra-highlight";
 import { ChartExtraLegend, ReactiveLegendState } from "./chart-extra-legend";
 import { ChartExtraNavigation, ChartExtraNavigationHandlers } from "./chart-extra-navigation";
 import { ChartExtraNodata, ReactiveNodataState } from "./chart-extra-nodata";
-import { ChartExtraPointer, ChartExtraPointerHandlers } from "./chart-extra-pointer";
+import { ChartExtraPointer, ChartExtraPointerHandlers, PointerHoverTarget } from "./chart-extra-pointer";
 import { ChartExtraTooltip, ReactiveTooltipState } from "./chart-extra-tooltip";
-import { ChartExtraZoom, ReactiveZoomState } from "./chart-extra-zoom";
+import { ChartExtraZoom, ChartExtraZoomHandlers, ReactiveZoomState } from "./chart-extra-zoom";
 
 // The API helper injects Cloudscape custom behaviors, and returns the API instance that comes with
 // reactive state and handlers to be assigned as Highcharts options, used by Cloudscape components
@@ -64,7 +64,12 @@ export function useChartAPI(
 
   // Like the visible items, the zoom range requires notifying the helper when it changes. The chart re-renders before
   // the context is updated, so the render still sees the previous range. The range is compared by value.
-  const zoomIndex = [settings.zoomEnabled, state.zoomRange?.x?.startValue, state.zoomRange?.x?.endValue].join("::");
+  const zoomIndex = [
+    settings.zoomEnabled,
+    state.zoomRange === undefined
+      ? "uncontrolled"
+      : `${state.zoomRange?.x?.startValue}:${state.zoomRange?.x?.endValue}`,
+  ].join("::");
   useEffect(() => {
     api.onZoomPropsChange();
   }, [api, zoomIndex]);
@@ -89,7 +94,8 @@ export class ChartAPI {
   private chartExtraLegend = new ChartExtraLegend(this.context);
   private chartExtraNodata = new ChartExtraNodata(this.context);
   private chartExtraAxisTitles = new ChartExtraAxisTitles(this.context);
-  private chartExtraZoom = new ChartExtraZoom(this.context);
+  private chartExtraZoom = new ChartExtraZoom(this.context, this.zoomHandlers);
+  private legendItemHover = new DebouncedCall<string>();
 
   constructor(
     settings: ChartExtraContext.Settings,
@@ -113,6 +119,7 @@ export class ChartAPI {
     const chartAPI = this;
     const onChartLoad: Highcharts.ChartLoadCallbackFunction = function (this) {
       chartAPI.chartExtraPointer.onChartLoad(this);
+      chartAPI.chartExtraZoom.onChartLoad(this);
     };
     const onChartRender: Highcharts.ChartRenderCallbackFunction = function (this) {
       updateChartContext(chartAPI.context, this);
@@ -126,8 +133,8 @@ export class ChartAPI {
       chartAPI.resetColorCounter();
       chartAPI.showMarkersForIsolatedPoints();
     };
-    const onChartClick: Highcharts.ChartClickCallbackFunction = function () {
-      chartAPI.chartExtraPointer.onChartClick(this.hoverPoint);
+    const onChartClick = function (this: Highcharts.Chart): boolean {
+      return chartAPI.chartExtraPointer.onChartClick(this.hoverPoint);
     };
     const onSeriesPointMouseOver: Highcharts.PointMouseOverCallbackFunction = function () {
       chartAPI.chartExtraPointer.onSeriesPointMouseOver(this);
@@ -135,8 +142,8 @@ export class ChartAPI {
     const onSeriesPointMouseOut: Highcharts.PointMouseOutCallbackFunction = function () {
       chartAPI.chartExtraPointer.onSeriesPointMouseOut();
     };
-    const onSeriesPointClick: Highcharts.PointClickCallbackFunction = function () {
-      chartAPI.chartExtraPointer.onSeriesPointClick(this);
+    const onSeriesPointClick = function (this: Highcharts.Point): boolean {
+      return chartAPI.chartExtraPointer.onSeriesPointClick(this);
     };
     return {
       onChartLoad,
@@ -151,6 +158,7 @@ export class ChartAPI {
   // There is no cleanup or destroy event in Highcharts options, so we define a custom one
   // to be used when the React component unmounts.
   public onChartDestroy = () => {
+    this.legendItemHover.cancelPrevious();
     this.chartExtraNavigation.onChartDestroy();
     this.chartExtraPointer.onChartDestroy();
     this.chartExtraTooltip.onChartDestroy();
@@ -200,13 +208,16 @@ export class ChartAPI {
   };
 
   public onZoomPropsChange = () => this.chartExtraZoom.onZoomPropsChange();
-
+  public setZoomCursor = this.chartExtraZoom.setCursor;
+  public setZoomControls = this.chartExtraZoom.setControls;
+  public onZoomCursorKeyDown = this.chartExtraZoom.onCursorKeyDown;
+  public onZoomBlur = this.chartExtraZoom.onBlur;
+  public setZoomButton = this.chartExtraZoom.setZoomButton;
+  public setResetZoomButton = this.chartExtraZoom.setResetButton;
+  public enterZoomMode = () => this.chartExtraZoom.enterZoomMode();
+  public exitZoomMode = () => this.chartExtraZoom.exitZoomMode("toggle");
   // Resets the zoom from the Reset button of the zoom controls.
-  public resetZoom = () => {
-    this.chartExtraZoom.resetZoom();
-    // The Reset button is removed once the reset is applied, so focus moves to the chart as it is pressed.
-    this.chartExtraNavigation.focusChartApplication();
-  };
+  public resetZoom = () => this.chartExtraZoom.resetZoom();
 
   // Hide the tooltip from an action initiated by the tooltip's content
   public hideTooltip = () => {
@@ -223,17 +234,28 @@ export class ChartAPI {
   public updateItemsVisibility = this.chartExtraLegend.updateItemsVisibility.bind(this.chartExtraLegend);
 
   // A callback used by the legend and filter components when series/segments visibility changes.
-  public onItemVisibilityChange = (items: readonly string[], detail: CoreChartProps.InteractionKind) =>
+  public onItemVisibilityChange = (items: readonly string[], detail: CoreChartProps.InteractionKind) => {
+    this.cancelPendingHovers();
     this.chartExtraLegend.onItemVisibilityChange(items, detail);
+  };
 
   // Callbacks used by the legend component when items highlight state changes.
-  public onHighlightChartItems = (itemIds: readonly string[]) => {
-    if (!this.isTooltipPinned) {
-      this.chartExtraHighlight.highlightChartItems(itemIds);
-      this.chartExtraLegend.onHighlightItems(itemIds);
-    }
+  public onHighlightChartItems = (itemIds: readonly string[]) => this.highlightChartItems(itemIds);
+  public onHoverLegendItem = (itemId: string, highlight: () => void) => {
+    const delay = this.context.settings.hoverDelay;
+    this.legendItemHover.call(
+      () => {
+        if (this.chartExtraLegend.get().items.some((item) => item.id === itemId && item.visible)) {
+          highlight();
+        }
+      },
+      delay > 0 ? delay : -1,
+      itemId,
+    );
   };
+  public onLeaveLegendItem = () => this.legendItemHover.cancelPrevious();
   public onClearChartItemsHighlight = () => {
+    this.legendItemHover.cancelPrevious();
     if (!this.isTooltipPinned) {
       this.chartExtraHighlight.clearChartItemsHighlight();
       this.chartExtraLegend.onClearHighlight();
@@ -246,12 +268,14 @@ export class ChartAPI {
   // Callbacks used for hover and keyboard navigation, and also exposed to the public API to give the ability
   // to highlight and show tooltip for the given point or group manually.
   public highlightChartItems = (itemIds: readonly string[]) => {
+    this.cancelPendingHovers();
     if (!this.isTooltipPinned) {
       this.chartExtraHighlight.highlightChartItems(itemIds);
       this.chartExtraLegend.onHighlightItems(itemIds);
     }
   };
   public setItemsVisible = (visibleItemsIds: readonly string[]) => {
+    this.cancelPendingHovers();
     this.chartExtraLegend.onItemVisibilityChange(visibleItemsIds, { interactionType: "api" });
   };
   public highlightChartPoint = (point: Highcharts.Point, { isApiCall }: { isApiCall: boolean }) => {
@@ -264,9 +288,9 @@ export class ChartAPI {
       this.highlightActions(group as Writeable<Highcharts.Point[]>, { isApiCall });
     }
   };
-  public clearChartHighlight = ({ isApiCall }: { isApiCall: boolean }) => {
+  public clearChartHighlight = ({ isApiCall, keepLegendHover }: { isApiCall: boolean; keepLegendHover?: boolean }) => {
     if (!this.isTooltipPinned) {
-      this.clearHighlightActions({ isApiCall });
+      this.clearHighlightActions({ isApiCall, keepLegendHover });
     }
   };
   public get publicApi() {
@@ -290,6 +314,7 @@ export class ChartAPI {
         // Dismiss any visible non-pinned tooltip when ESC is pressed.
         // Returns true if a tooltip was dismissed, false otherwise.
         // Used by ESC handlers at group/point level to decide whether to also navigate.
+        this.cancelPendingHovers();
         const tooltipState = this.chartExtraTooltip.get();
         if (tooltipState.visible && !tooltipState.pinned) {
           this.clearChartHighlight({ isApiCall: false });
@@ -325,6 +350,12 @@ export class ChartAPI {
     };
   }
 
+  private get zoomHandlers(): ChartExtraZoomHandlers {
+    return {
+      onHideTooltip: () => this.hideTooltip(),
+    };
+  }
+
   // A set of callbacks required for pointer navigation.
   private get pointerHandlers(): ChartExtraPointerHandlers {
     return {
@@ -335,7 +366,16 @@ export class ChartAPI {
         this.highlightChartGroup(group, { isApiCall: false });
       },
       onHoverLost: () => {
-        this.clearChartHighlight({ isApiCall: false });
+        this.clearChartHighlight({ isApiCall: false, keepLegendHover: true });
+      },
+      onHoverPreview: (target) => {
+        if (!this.isTooltipPinned) {
+          const { point, group } = this.getHighlightTarget(target);
+          this.chartExtraTooltip.showCursor(point, group);
+        }
+      },
+      onHoverPreviewCancel: () => {
+        this.chartExtraTooltip.restoreCursor();
       },
       onPointClick: (point) => {
         this.pinTooltipOnPoint(point);
@@ -343,6 +383,7 @@ export class ChartAPI {
       onGroupClick: (group) => {
         this.pinTooltipOnGroup(group);
       },
+      isLocked: () => this.chartExtraZoom.pointerLocked,
     };
   }
 
@@ -436,8 +477,8 @@ export class ChartAPI {
     target: Highcharts.Point | Highcharts.Point[],
     { isApiCall, overrideTooltipLock }: { isApiCall: boolean; overrideTooltipLock?: boolean },
   ) {
-    const point = Array.isArray(target) ? null : target;
-    const group = Array.isArray(target) ? target : this.context.derived.getPointsByX(target.x);
+    this.cancelPendingHovers();
+    const { point, group } = this.getHighlightTarget(target);
 
     if (!this.isTooltipPinned) {
       // Update Highcharts elements state.
@@ -461,7 +502,29 @@ export class ChartAPI {
     }
   }
 
-  private clearHighlightActions = ({ isApiCall }: { isApiCall: boolean }) => {
+  public cancelPendingHovers = ({ keepLegendHover = false }: { keepLegendHover?: boolean } = {}) => {
+    if (this.chartExtraPointer.cancelPendingHover()) {
+      this.chartExtraTooltip.restoreCursor();
+    }
+    if (!keepLegendHover) {
+      this.legendItemHover.cancelPrevious();
+    }
+  };
+
+  private getHighlightTarget(target: PointerHoverTarget) {
+    const point = Array.isArray(target) ? null : target;
+    const group = Array.isArray(target) ? target : this.context.derived.getPointsByX(target.x);
+    return { point, group };
+  }
+
+  private clearHighlightActions = ({
+    isApiCall,
+    keepLegendHover,
+  }: {
+    isApiCall: boolean;
+    keepLegendHover?: boolean;
+  }) => {
+    this.cancelPendingHovers({ keepLegendHover });
     if (!this.isTooltipPinned) {
       // Update Highcharts elements state.
       this.chartExtraHighlight.clearChartItemsHighlight();
