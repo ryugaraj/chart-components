@@ -1,0 +1,3 @@
+function e(e){return e===null?``:new Date(e).toLocaleDateString(`en-US`,{month:`short`,day:`numeric`,hour:`numeric`,minute:`numeric`,hour12:!1}).split(`,`).join(`
+`)}function t(e){if(e===null)return``;let t=e=>parseFloat(e.toFixed(2)).toString(),n=Math.abs(e);return n===0?`0`:n<.01?e.toExponential(0):n>=1e9?t(e/1e9)+`G`:n>=1e6?t(e/1e6)+`M`:n>=1e3?t(e/1e3)+`K`:t(e)}function n(e){return e===null?``:`$`+e.toLocaleString(`en-US`,{minimumFractionDigits:2,maximumFractionDigits:2})}function r(e){return e===null?``:`$`+e.toLocaleString(`en-US`,{minimumFractionDigits:2,maximumFractionDigits:2})}function i(e){return e===null?``:`${(100*e).toFixed(0)}%`}export{r as a,i,n,t as r,e as t};
+//# sourceMappingURL=formatters-BV3m_7LW.js.map

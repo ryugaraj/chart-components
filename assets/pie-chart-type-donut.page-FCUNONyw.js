@@ -1,0 +1,2 @@
+import{Xi as e}from"./use-container-breakpoints-BRQtTkid.js";import{a as t,i as n,r}from"./templates-B-af1_qX.js";import{n as i,t as a}from"./pie-chart-CrXiHdk9.js";var o=e();function s(){return(0,o.jsx)(n,{title:`Migration: Pie charts`,children:(0,o.jsx)(t,{children:(0,o.jsx)(r,{examples:[{old:(0,o.jsx)(i,{type:`donut`,hideFilter:!0}),new:(0,o.jsx)(a,{type:`donut`}),containerHeight:450}]})})})}export{s as default};
+//# sourceMappingURL=pie-chart-type-donut.page-FCUNONyw.js.map

@@ -1,0 +1,2 @@
+import{Xi as e}from"./use-container-breakpoints-BRQtTkid.js";import{X as t,Y as n,t as r}from"./chart-core-CpzWj3Wc.js";var i=e();function a({keyboardNavigation:e=!0,...n}){let a=t(`CoreChart`,{props:{}});return(0,i.jsx)(r,{keyboardNavigation:e,...n,...a})}n(a,`CoreChart`);export{a as t};
+//# sourceMappingURL=core-chart-s0rl8Xb_.js.map

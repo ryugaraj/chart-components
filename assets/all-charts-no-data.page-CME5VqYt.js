@@ -1,0 +1,33 @@
+import{Xi as e,n as t}from"./use-container-breakpoints-BRQtTkid.js";import{t as n}from"./cartesian-chart-U6gl1hxH.js";import{_ as r,a as i,i as a,r as o}from"./templates-B-af1_qX.js";import"./components-QtsH93vQ.js";import{t as s}from"./formatters-BV3m_7LW.js";import{r as c}from"./page-settings-Ra8lENWZ.js";import{t as l}from"./line-chart-08YdVxa9.js";import{n as u,t as d}from"./pie-chart-no-data-Chse9vVx.js";import{t as f}from"./code-snippet-LJ3EpSCb.js";var p=e(),m=[new Date(16010712e5),new Date(16010784e5),new Date(16010856e5),new Date(16010928e5),new Date(16011e8)],h=[{name:`Events`,type:`line`,data:[2,4,6,8,16].map((e,t)=>({x:m[t].getTime(),y:e}))}],g=[{name:`Events`,type:`line`,data:[]}],_=[{name:`Timestamp`,type:`x-threshold`,value:m[2].getTime()},{name:`Alarm`,type:`y-threshold`,value:30}],v=[{title:`Events`,type:`line`,data:[2,4,6,8,16].map((e,t)=>({x:m[t],y:e}))}],y=[{title:`Events`,type:`line`,data:[]}],b=[{title:`Timestamp`,type:`threshold`,x:m[2]},{title:`Alarm`,type:`threshold`,y:30}];function x({statusType:e,series:t,hideSeries:r}){let{chartProps:i}=c();return(0,p.jsx)(n,{...i.cartesian,noData:{...i.cartesian.noData,statusType:e},fitHeight:!0,chartMinHeight:150,ariaLabel:`Line chart`,stacking:`normal`,series:{none:[],empty:g,threshold:_,data:h}[t],visibleSeries:r?[]:void 0,xAxis:{type:`datetime`,title:`Time (UTC)`,min:m[0].getTime(),max:m[m.length-1].getTime(),valueFormatter:s},yAxis:{title:`Error count`,min:0,max:50}})}function S({statusType:e,series:t,hideSeries:n}){let{chartProps:r}=c();return(0,p.jsx)(l,{fitHeight:!0,hideFilter:!0,height:150,series:{none:[],empty:y,threshold:b,data:v}[t],visibleSeries:n?[]:void 0,xDomain:[m[0],m[m.length-1]],yDomain:[0,50],i18nStrings:{xTickFormatter:e=>s(e.getTime())},ariaLabel:`Line chart`,xScaleType:`time`,xTitle:`Time (UTC)`,yTitle:`Error count`,...r.cartesian.noData,onRecoveryClick:()=>{},statusType:e})}var C=300,w=(0,p.jsxs)(r,{size:`s`,children:[(0,p.jsxs)(t,{variant:`span`,children:[`In the new charts, the no data states are defined with `,(0,p.jsx)(t,{variant:`code`,children:`noData`}),` property, that includes status, and state content. If loading and error content is not explicitly defined, the text is taken from the`,` `,(0,p.jsx)(t,{variant:`code`,children:`i18nStrings`}),` (built-in or explicitly provided).`]}),(0,p.jsx)(f,{content:`let oldChart = (
+  <PieChart
+    {...props}
+    statusType="error"
+    empty={<EmptyStateIndicator />}
+    noMatch={<NoMatchStateIndicator />}
+    loadingText={i18n.loadingText} // Supported with built-in i18n
+    errorText={i18n.errorText} // Supported with built-in i18n
+    recoveryText={i18n.recoveryText} // Supported with built-in i18n
+    onRecoveryClick={onRecoveryClick}
+  />
+);
+
+let newChart = (
+  <PieChart
+    {...props}
+    i18nStrings={{
+      loadingText: i18n.loadingText, // Supported with built-in i18n
+      errorText: i18n.errorText, // Supported with built-in i18n
+      recoveryText: i18n.recoveryText, // Supported with built-in i18n
+    }}
+    noData={{
+      statusType: "error",
+      empty: <EmptyStateIndicator />,
+      noMatch: <NoMatchStateIndicator />,
+      loading: <LoadingStateIndicator />, // Overrides the default loading state indicator (that uses i18n strings)
+      error: <ErrorStateIndicator />, // Overrides the default error state indicator (that uses i18n strings)
+      onRecoveryClick: onRecoveryClick,
+    }}
+  />
+);`})]});function T(){return(0,p.jsxs)(a,{title:`Migration: No-data states`,subtitle:`This page is dedicated to chart no-data state (empty, no-match, loading, error) differences between old and new charts.`,children:[(0,p.jsx)(i,{title:`All no-data states`,docs:{functional:{bullets:[`In the old cartesian charts series without data do not count towards empty or no-match state, so no indicator is shown.
+              In the new cartesian charts the empty or no-match state can be added if all series are empty.`,`In the new charts the threshold series are always empty. These series get their data points only if there are other non-empty series available in the chart. This means, the empty or no-match state can be shown on top of thresholds.`]},implementation:{before:w}}}),(0,p.jsx)(i,{title:`Empty state`,children:(0,p.jsx)(o,{examples:[{tags:[`no series`],old:(0,p.jsx)(S,{statusType:`finished`,series:`none`}),new:(0,p.jsx)(x,{statusType:`finished`,series:`none`}),containerHeight:C},{tags:[`no data`,`cartesian chart`],old:(0,p.jsx)(S,{statusType:`finished`,series:`empty`}),new:(0,p.jsx)(x,{statusType:`finished`,series:`empty`}),containerHeight:C},{tags:[`no data`,`cartesian chart`,`threshold`],old:(0,p.jsx)(S,{statusType:`finished`,series:`threshold`}),new:(0,p.jsx)(x,{statusType:`finished`,series:`threshold`}),containerHeight:C},{tags:[`no data`,`pie chart`],old:(0,p.jsx)(u,{statusType:`finished`,series:`empty`}),new:(0,p.jsx)(d,{statusType:`finished`,series:`empty`}),containerHeight:C}]})}),(0,p.jsx)(i,{title:`No match state`,children:(0,p.jsx)(o,{examples:[{tags:[`cartesian chart`],old:(0,p.jsx)(S,{statusType:`finished`,series:`data`,hideSeries:!0}),new:(0,p.jsx)(x,{statusType:`finished`,series:`data`,hideSeries:!0}),containerHeight:C},{tags:[`pie chart`],old:(0,p.jsx)(u,{statusType:`finished`,series:`data`,hideSeries:!0}),new:(0,p.jsx)(d,{statusType:`finished`,series:`data`,hideSeries:!0}),containerHeight:C}]})}),(0,p.jsx)(i,{title:`Loading state`,children:(0,p.jsx)(o,{examples:[{tags:[`no series`],old:(0,p.jsx)(S,{statusType:`loading`,series:`none`}),new:(0,p.jsx)(x,{statusType:`loading`,series:`none`}),containerHeight:C},{tags:[`no data`,`cartesian chart`],old:(0,p.jsx)(S,{statusType:`loading`,series:`empty`}),new:(0,p.jsx)(x,{statusType:`loading`,series:`empty`}),containerHeight:C},{tags:[`no data`,`pie chart`],old:(0,p.jsx)(u,{statusType:`loading`,series:`empty`}),new:(0,p.jsx)(d,{statusType:`loading`,series:`empty`}),containerHeight:C}]})}),(0,p.jsx)(i,{title:`Error state`,children:(0,p.jsx)(o,{examples:[{tags:[`no series`],old:(0,p.jsx)(S,{statusType:`error`,series:`none`}),new:(0,p.jsx)(x,{statusType:`error`,series:`none`}),containerHeight:C},{tags:[`no data`,`cartesian chart`],old:(0,p.jsx)(S,{statusType:`error`,series:`empty`}),new:(0,p.jsx)(x,{statusType:`error`,series:`empty`}),containerHeight:C},{tags:[`no data`,`pie chart`],old:(0,p.jsx)(u,{statusType:`error`,series:`empty`}),new:(0,p.jsx)(d,{statusType:`error`,series:`empty`}),containerHeight:C}]})})]})}export{T as default};
+//# sourceMappingURL=all-charts-no-data.page-CME5VqYt.js.map
