@@ -99,6 +99,9 @@ export default function () {
             "showLegendActions",
             "useFallback",
             "tooltipSeriesSorting",
+            "zoom",
+            "hideZoomControls",
+            "hoverDebounce",
           ]}
         />
       }

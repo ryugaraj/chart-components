@@ -3,12 +3,14 @@
 
 import { act, useState } from "react";
 import { fireEvent, render } from "@testing-library/react";
+import highcharts from "highcharts";
+import { vi } from "vitest";
 
 import { ButtonWrapper } from "@cloudscape-design/components/test-utils/dom";
 
 import "@cloudscape-design/components/test-utils/dom";
 import { CoreChartProps } from "../../../lib/components/core/interfaces";
-import { InternalZoomProps } from "../../../lib/components/core/internal-interfaces";
+import { InternalHoverProps, InternalZoomProps } from "../../../lib/components/core/internal-interfaces";
 import testClasses from "../../../lib/components/core/test-classes/styles.selectors";
 import { fireNonCancelableEvent } from "../../../lib/components/internal/events";
 import { TestI18nProvider } from "../../../lib/components/internal/utils/test-i18n-provider";
@@ -19,13 +21,19 @@ import CoreChartWrapper from "../../../lib/components/test-utils/dom/internal/co
 
 export class ExtendedTestWrapper extends CoreChartWrapper {
   findHighchartsTooltip = () => this.findByClassName("highcharts-tooltip");
-  findResetZoomButton = () => this.findComponent(`.${testClasses["reset-zoom-button"]}`, ButtonWrapper);
+  findZoomButton = () => this.findComponent(`.${testClasses["zoom-button"]}`, ButtonWrapper);
+  findExitZoomButton = () => this.findComponent(`.${testClasses["exit-zoom-button"]}`, ButtonWrapper);
+  findResetZoomButton = () => {
+    const button = this.findComponent(`.${testClasses["reset-zoom-button"]}`, ButtonWrapper);
+    return button && !button.getElement().closest("[hidden]") ? button : null;
+  };
+  findZoomCursor = () => this.findByClassName(testClasses["zoom-cursor"]);
 }
 
 // The core chart accepts the internal zoom properties, which are not part of its public interface yet.
-const CoreChartWithZoom = CoreChart as React.ComponentType<CoreChartProps & InternalZoomProps>;
+const CoreChartWithZoom = CoreChart as React.ComponentType<CoreChartProps & InternalZoomProps & InternalHoverProps>;
 
-export function StatefulChart(props: CoreChartProps & InternalZoomProps) {
+export function StatefulChart(props: CoreChartProps & InternalZoomProps & InternalHoverProps) {
   const [visibleItems, setVisibleItems] = useState<readonly string[]>(props.visibleItems ?? []);
   const [zoomRange, setZoomRange] = useState(props.zoomRange);
   return (
@@ -47,16 +55,17 @@ export function StatefulChart(props: CoreChartProps & InternalZoomProps) {
 }
 
 export type CoreChartTestProps = Partial<CoreChartProps> &
-  InternalZoomProps & {
+  InternalZoomProps &
+  InternalHoverProps & {
     onLegendItemHighlight?: () => void;
     i18nProvider?: Record<string, Record<string, string>>;
   };
 
 export function renderChart(
   { i18nProvider, ...props }: CoreChartTestProps,
-  Component: React.ComponentType<CoreChartProps & InternalZoomProps> = CoreChartWithZoom,
+  Component: React.ComponentType<CoreChartProps & InternalZoomProps & InternalHoverProps> = CoreChartWithZoom,
 ) {
-  const ComponentWrapper = (props: CoreChartProps & InternalZoomProps) => {
+  const ComponentWrapper = (props: CoreChartProps & InternalZoomProps & InternalHoverProps) => {
     return i18nProvider ? (
       <TestI18nProvider messages={i18nProvider}>
         <Component options={{}} {...props} />
@@ -129,4 +138,31 @@ export function hoverSecondaryLegendItem(index: number, wrapper: ExtendedTestWra
   act(() => {
     fireEvent.mouseOver(wrapper.findLegend({ axisId: "secondary" })!.findItems()[index].getElement());
   });
+}
+
+export function getCurrentChart() {
+  return [...highcharts.charts].reverse().find((c) => c)!;
+}
+
+export function getXExtremes() {
+  const { min, max } = getCurrentChart().xAxis[0].getExtremes();
+  return { min, max };
+}
+
+export function renderInRtl() {
+  const getComputedStyle = window.getComputedStyle;
+  vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudoElement) => {
+    const style = getComputedStyle(element, pseudoElement);
+    return new Proxy(style, {
+      get: (target, property) => (property === "direction" ? "rtl" : Reflect.get(target, property, target)),
+    });
+  });
+}
+
+export function focusOutsideChart() {
+  const button = document.createElement("button");
+  button.setAttribute("data-testid", "outside");
+  document.body.appendChild(button);
+  act(() => button.focus());
+  return button;
 }

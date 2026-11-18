@@ -27,15 +27,12 @@ import { pages, pagesMap } from "./pages";
 
 import "@cloudscape-design/global-styles/index.css";
 
-// The chart zoom messages are not yet published in the components package.
+// The disabled reason of the zoom button is not yet published in the components package.
 const zoomMessages = {
   "cloudscape-design-components": {
     en: {
       "[charts]": {
-        "i18nStrings.resetZoomButtonText": "Reset",
-        "i18nStrings.resetZoomButtonAriaLabel": "Reset zoom to show full data range",
-        "i18nStrings.zoomControlsAriaLabel": "Chart zoom controls",
-        "i18nStrings.zoomResetAnnouncementText": "Zoom reset. Showing the full data range.",
+        "i18nStrings.zoomButtonDisabledReason": "There is no narrower range to zoom into",
       },
     },
   },

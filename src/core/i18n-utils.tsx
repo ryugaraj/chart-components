@@ -14,9 +14,17 @@ export interface ChartLabels {
   chartYAxisLabel?: string;
   chartSegmentLabel?: string;
   itemMarkerLabel?: (status?: ChartSeriesMarkerStatus) => string | undefined;
+  enterZoomModeButtonText?: string;
+  zoomButtonDisabledReason?: string;
   resetZoomButtonText?: string;
   resetZoomButtonAriaLabel?: string;
   zoomControlsAriaLabel?: string;
+  zoomCursorAriaLabel?: string;
+  zoomModeEnteredAnnouncementText?: (value: string) => string;
+  zoomStartPointAnnouncementText?: (value: string) => string;
+  zoomRangeChangeAnnouncementText?: (startValue: string, endValue: string) => string;
+  zoomSelectionAnnouncementText?: (startValue: string, endValue: string) => string;
+  zoomModeExitedAnnouncementText?: string;
   zoomResetAnnouncementText?: string;
 }
 
@@ -31,8 +39,14 @@ export function useChartI18n({
 }): ChartLabels {
   const i18n = useInternalI18n("[charts]");
   const i18nPie = useInternalI18n("pie-chart");
-  // The zoom messages are not part of the typed "[charts]" namespace of the components package yet.
-  const i18nZoom = i18n as unknown as (key: string, value: undefined) => undefined | string;
+  // The disabled reason is not part of the typed "[charts]" namespace of the components package yet.
+  const i18nUntyped = i18n as unknown as (key: string, provided: undefined) => undefined | string;
+  const valueText = (
+    key: "i18nStrings.zoomModeEnteredAnnouncementText" | "i18nStrings.zoomStartPointAnnouncementText",
+  ) => i18n(key, undefined, (format) => (value: string) => format({ value }));
+  const rangeText = (
+    key: "i18nStrings.zoomRangeChangeAnnouncementText" | "i18nStrings.zoomSelectionAnnouncementText",
+  ) => i18n(key, undefined, (format) => (startValue: string, endValue: string) => format({ startValue, endValue }));
   return {
     chartLabel: ariaLabel,
     chartDescription: ariaDescription,
@@ -42,10 +56,18 @@ export function useChartI18n({
     chartXAxisLabel: i18n("i18nStrings.xAxisAriaRoleDescription", i18nStrings?.xAxisRoleDescription),
     chartYAxisLabel: i18n("i18nStrings.yAxisAriaRoleDescription", i18nStrings?.yAxisRoleDescription),
     chartSegmentLabel: i18nPie("i18nStrings.segmentAriaRoleDescription", i18nStrings?.segmentRoleDescription),
-    resetZoomButtonText: i18nZoom("i18nStrings.resetZoomButtonText", undefined),
-    resetZoomButtonAriaLabel: i18nZoom("i18nStrings.resetZoomButtonAriaLabel", undefined),
-    zoomControlsAriaLabel: i18nZoom("i18nStrings.zoomControlsAriaLabel", undefined),
-    zoomResetAnnouncementText: i18nZoom("i18nStrings.zoomResetAnnouncementText", undefined),
+    enterZoomModeButtonText: i18n("i18nStrings.enterZoomModeButtonText", undefined),
+    zoomButtonDisabledReason: i18nUntyped("i18nStrings.zoomButtonDisabledReason", undefined),
+    resetZoomButtonText: i18n("i18nStrings.resetZoomButtonText", undefined),
+    resetZoomButtonAriaLabel: i18n("i18nStrings.resetZoomButtonAriaLabel", undefined),
+    zoomControlsAriaLabel: i18n("i18nStrings.zoomControlsAriaLabel", undefined),
+    zoomCursorAriaLabel: i18n("i18nStrings.zoomCursorAriaLabel", undefined),
+    zoomModeEnteredAnnouncementText: valueText("i18nStrings.zoomModeEnteredAnnouncementText"),
+    zoomStartPointAnnouncementText: valueText("i18nStrings.zoomStartPointAnnouncementText"),
+    zoomRangeChangeAnnouncementText: rangeText("i18nStrings.zoomRangeChangeAnnouncementText"),
+    zoomSelectionAnnouncementText: rangeText("i18nStrings.zoomSelectionAnnouncementText"),
+    zoomModeExitedAnnouncementText: i18n("i18nStrings.zoomModeExitedAnnouncementText", undefined),
+    zoomResetAnnouncementText: i18n("i18nStrings.zoomResetAnnouncementText", undefined),
     itemMarkerLabel: (status = "default") => {
       switch (status) {
         case "warning":
